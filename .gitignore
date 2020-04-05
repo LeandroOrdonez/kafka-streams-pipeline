@@ -1,0 +1,7 @@
+.idea/
+.settings/
+.vscode/
+target/
+.project
+src/main/java/querying/util/Sandbox.java
+*.iml
