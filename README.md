@@ -40,6 +40,29 @@ The complete list of arguments the application can take is listed below:
 `p`, `endpoint-port`|REST endpoint port. Defaults to 7070
 `cl`, `cleanup`|Should a cleanup be performed before staring. Defaults to false
 
+### Run with Docker
+
+In case you are already using the testing environment from [this blog post](https://leandro.ordonez.tech/ideas/mocking-sensor-data-generator/) you just have run the command below:
+
+```shell script
+docker run -it \
+    --network="host" \
+    -p 7070:7070 \
+    -e GEOHASH_PRECISION=6
+    kafka-streams-pipeline
+```
+
+If you have are working with a different (and remote) Kafka environment you should omit the `--network="host"` argument and set the proper environment variables:
+
+```shell script
+docker run -it \
+    -p 7070:7070 \
+    -e KBROKERS="<comma-separated_list_of_urls>" \
+    -e READINGS_TOPIC="<topic_name>" \
+    -e GEOHASH_PRECISION=6 \
+    kafka-streams-pipeline
+```
+
 ### Query API
 
 This application is able to serve two types of queries: (*1*) **Historical queries**, namely those asking how the temperature has evolved along a given geospatial region, over a certain period of time; and (*2*) **Snapshot queries** which provide a time-slice view of the temperature for a specific moment in time. 

@@ -1,5 +1,7 @@
 package ingestion;
 
+import ingestion.util.serdes.JsonPOJODeserializer;
+import ingestion.util.serdes.JsonPOJOSerializer;
 import model.AggregateTuple;
 import model.TemperatureReading;
 import org.apache.commons.cli.*;
@@ -18,8 +20,6 @@ import org.apache.kafka.streams.state.HostInfo;
 import org.apache.kafka.streams.state.KeyValueStore;
 import querying.QueryingService;
 import querying.util.TSExtractor;
-import ingestion.util.serdes.JsonPOJODeserializer;
-import ingestion.util.serdes.JsonPOJOSerializer;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -33,12 +33,12 @@ import java.util.Properties;
 import java.util.concurrent.CountDownLatch;
 
 public class KafkaStreamsAggregator {
-    public static final String READINGS_TOPIC = "temperature-readings";
-    public static final String APP_NAME = "temperature-aggregator";
-    public static final String KBROKERS = "localhost:9092";
-    public static final String REST_ENDPOINT_HOSTNAME = "localhost";
-    public static final int REST_ENDPOINT_PORT = 7070;
-    public static final Integer GEOHASH_PRECISION = 6;
+    public static final String READINGS_TOPIC = System.getenv("READINGS_TOPIC") != null ? System.getenv("READINGS_TOPIC") : "temperature-readings";
+    public static final String APP_NAME = System.getenv("APP_NAME") != null ? System.getenv("APP_NAME") : "temperature-aggregator";
+    public static final String KBROKERS = System.getenv("KBROKERS") != null ? System.getenv("KBROKERS") : "localhost:9092";
+    public static final String REST_ENDPOINT_HOSTNAME = System.getenv("REST_ENDPOINT_HOSTNAME") != null ? System.getenv("REST_ENDPOINT_HOSTNAME") : "localhost";
+    public static final int REST_ENDPOINT_PORT = System.getenv("REST_ENDPOINT_PORT") != null ? Integer.parseInt(System.getenv("REST_ENDPOINT_PORT")) : 7070;
+    public static final Integer GEOHASH_PRECISION = System.getenv("GEOHASH_PRECISION") != null ? Integer.parseInt(System.getenv("GEOHASH_PRECISION")) : 6;
     public static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMdd:HHmmss:SSS");
 
     private static AggregateTuple temperatureAggregator(String key,
