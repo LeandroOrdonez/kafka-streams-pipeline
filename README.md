@@ -8,7 +8,7 @@ This Kafka Streams application implements a complete data pipeline, enabling the
 
 This application consumes a messages from a Kafka topic which follow the format specified next:
 
-```shell script
+```json
 {"timestamp": 1585054952527, "geohash": "u155mz82dv33", "sensorId":"s000001", "tempVal": 20.3, "tempUnit": "c"} 
 {"timestamp": 1585080280353, "geohash": "u155krxynu5s", "sensorId":"s000002", "tempVal": 19.7, "tempUnit": "c"}
 {"timestamp": 1585080335267, "geohash": "u155mz827m6q", "sensorId":"s000010", "tempVal": 24.6, "tempUnit": "c"}
@@ -54,7 +54,7 @@ $ curl "http://localhost:7070/api/temperature/aggregate/avg/history?interval=1da
 ``` 
 By running the query above, the application replies with a time-series representing the average value of temperature along the polygon defined by the geohash prefixes `u155vq,u155vu`, over the last 24 hours. The response obtained from this HTTP request should be similar to this one:
 
-```shell script
+```json
 {
     "columns": [
         "timestamp",
@@ -94,7 +94,7 @@ $ curl "http://localhost:7070/api/temperature/aggregate/avg/snapshot?ts=15861096
 The application reports the average temperature over the region covered by the specified bounding box, at `1586109600000` (April 5, 2020 6:00:00 PM GMT). 
 The response is provided as a list of tuples `[geohash, aggregate_value]`, as shown in the example below:
 
-```shell script
+```json
 {
     "columns": [
         "geohash",
