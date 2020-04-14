@@ -18,13 +18,11 @@ import org.apache.kafka.streams.Topology;
 import org.apache.kafka.streams.kstream.*;
 import org.apache.kafka.streams.state.HostInfo;
 import org.apache.kafka.streams.state.KeyValueStore;
+import org.apache.kafka.streams.state.WindowStore;
 import querying.QueryingService;
 import querying.util.TSExtractor;
 
-import java.time.Instant;
-import java.time.LocalDateTime;
-import java.time.ZoneId;
-import java.time.ZonedDateTime;
+import java.time.*;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.HashMap;
@@ -45,9 +43,9 @@ public class KafkaStreamsAggregator {
                                                         TemperatureReading value,
                                                         AggregateTuple aggregate) {
         aggregate.key = key;
-        aggregate.geohash = key.split("#")[0];
-        aggregate.timestamp = LocalDateTime.parse(key.split("#")[1], DATE_TIME_FORMATTER)
-                .toInstant(ZoneId.systemDefault().getRules().getOffset(Instant.now())).toEpochMilli(); // back to milliseconds timestamp
+        // aggregate.geohash = key; //.split("#")[0];
+        // aggregate.timestamp = LocalDateTime.parse(key.split("#")[1], DATE_TIME_FORMATTER)
+        //        .toInstant(ZoneId.systemDefault().getRules().getOffset(Instant.now())).toEpochMilli(); // back to milliseconds timestamp
         aggregate.count = aggregate.count + 1; // increment by 1 the current record count
         aggregate.sum = aggregate.sum + (Double) value.getTempVal(); // add the incoming value to the current sum
         aggregate.avg = aggregate.sum / aggregate.count; // update the average
@@ -91,20 +89,22 @@ public class KafkaStreamsAggregator {
                             ZoneId.systemDefault());
 
                     // Get 'Date:Time:Millis' formatted timestamp string truncated to the exact hour
-                    String hourTimestamp = readingDate.truncatedTo(ChronoUnit.HOURS)
-                            .toLocalDateTime().format(DATE_TIME_FORMATTER);
+                    // String hourTimestamp = readingDate.truncatedTo(ChronoUnit.HOURS)
+                    //        .toLocalDateTime().format(DATE_TIME_FORMATTER);
 
                     // Return the new truncated key (<6 char geohash-prefix>#<hour-truncated timestamp>)
-                    return reading.getGeohash().substring(0, geohashPrecision) + "#" + hourTimestamp;
+                    return reading.getGeohash().substring(0, geohashPrecision); // + "#" + hourTimestamp;
                 }
         ).groupByKey();
 
-        KTable <String, AggregateTuple> perHourAggregate = perHourKeyedStream.aggregate(
-                () -> new AggregateTuple("", "", 0L, 0L, 0.0, 0.0), // Lambda expression for the Initializer
-                (key, value, aggregate) -> temperatureAggregator(key, value, aggregate), // Lambda expression for the Aggregator
-                Materialized. <String, AggregateTuple, KeyValueStore <Bytes, byte[]>> as(
-                        "view-gh" + geohashPrecision + "-hour").withValueSerde(aggregateTupleSerde).withCachingEnabled()
-        );
+        KTable <Windowed<String>, AggregateTuple> perHourAggregate = perHourKeyedStream
+                .windowedBy(TimeWindows.of(Duration.ofHours(1)))
+                .aggregate(
+                    () -> new AggregateTuple("", "", 0L, 0L, 0.0, 0.0), // Lambda expression for the Initializer
+                    (key, value, aggregate) -> temperatureAggregator(key, value, aggregate), // Lambda expression for the Aggregator
+                    Materialized. <String, AggregateTuple, WindowStore<Bytes, byte[]>> as(
+                            "view-gh" + geohashPrecision + "-hour").withValueSerde(aggregateTupleSerde).withCachingEnabled()
+                );
 
         Topology topology = builder.build();
         System.out.println(topology.describe());

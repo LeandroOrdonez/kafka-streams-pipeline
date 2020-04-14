@@ -30,6 +30,6 @@ EXPOSE $REST_ENDPOINT_PORT
 
 COPY --from=build /usr/local/service/target/kafka-streams-pipeline-0.1-jar-with-dependencies.jar /usr/local/service/kafka-streams-pipeline-0.1-jar-with-dependencies.jar
 
-CMD ["sh", "-c", "java -cp /usr/local/service/kafka-streams-pipeline-0.1-jar-with-dependencies.jar ingestion.KafkaStreamsAggregator --geohash-precision ${GEOHASH_PRECISION}"]
+CMD ["sh", "-c", "java -cp /usr/local/service/kafka-streams-pipeline-0.1-jar-with-dependencies.jar ingestion.KafkaStreamsAggregator --geohash-precision ${GEOHASH_PRECISION} --cleanup"]
 
 

@@ -9,10 +9,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.apache.kafka.streams.KafkaStreams;
 import org.apache.kafka.streams.KeyValue;
-import org.apache.kafka.streams.state.HostInfo;
-import org.apache.kafka.streams.state.KeyValueIterator;
-import org.apache.kafka.streams.state.QueryableStoreTypes;
-import org.apache.kafka.streams.state.ReadOnlyKeyValueStore;
+import org.apache.kafka.streams.state.*;
 import org.glassfish.jersey.jackson.JacksonFeature;
 import querying.util.Aggregator;
 import querying.util.HostStoreInfo;
@@ -83,7 +80,7 @@ public class QueryingController {
     }
 
     public TreeMap<String, Aggregate> solveTimeQuery(String aggregate, Long timestamp, int geohashPrecision, List<Double> bbox, Boolean local) {
-        Long ts = truncateTS(timestamp); // truncate the provided timestamp to the exact hour
+        Long ts = truncateTS(timestamp, ChronoUnit.HOURS); // truncate the provided timestamp to the exact hour
         final String viewStoreName = "view-gh" + geohashPrecision + "-hour";
         if (local) { // Answering request for LOCAL state
             TreeMap<String, Aggregate> aggregateReadings = new TreeMap<>();
@@ -171,16 +168,21 @@ public class QueryingController {
     }
 
     public Map<Long, Aggregate> getLocalAggregates4Range(String storeName, String geohashPrefix, Long from, Long to) {
-        final ReadOnlyKeyValueStore<String, AggregateTuple> viewStore = streams.store(storeName,
-                QueryableStoreTypes.keyValueStore());
-        final String fromK = geohashPrefix + "#" + (from != null ? toFormattedTimestamp(from, ZoneId.systemDefault()) : "");
-        final String toK = geohashPrefix + "#" + (to != null ? toFormattedTimestamp(to, ZoneId.systemDefault()) : toFormattedTimestamp(System.currentTimeMillis(), ZoneId.systemDefault()));
+        final ReadOnlyWindowStore<String, AggregateTuple> viewStore = streams.store(storeName,
+                QueryableStoreTypes.windowStore());
+        // final String fromK = geohashPrefix + "#" + (from != null ? toFormattedTimestamp(from, ZoneId.systemDefault()) : "");
+        // final String toK = geohashPrefix + "#" + (to != null ? toFormattedTimestamp(to, ZoneId.systemDefault()) : toFormattedTimestamp(System.currentTimeMillis(), ZoneId.systemDefault()));
+        long fromk = from != null ? from : 0L;
+        long tok = to != null ? to : System.currentTimeMillis();
         Map<Long, Aggregate> aggregateReadings = new TreeMap<>();
-        KeyValueIterator<String, AggregateTuple> iterator =  viewStore.range(fromK, toK);
+        WindowStoreIterator<AggregateTuple> iterator =  viewStore.fetch(geohashPrefix, Instant.ofEpochMilli(fromk), Instant.ofEpochMilli(tok)); //.range(fromK, toK);
         while (iterator.hasNext()) {
-            KeyValue<String, AggregateTuple> aggFromStore = iterator.next();
+            KeyValue<Long, AggregateTuple> aggFromStore = iterator.next();
+            long windowTimestamp = aggFromStore.key;
+            AggregateTuple windowValue = aggFromStore.value;
+//            System.out.println("Aggregate of '" + geohashPrefix + "' @ time " + windowTimestamp + " is " + windowValue);
             Aggregate agg = new Aggregate(aggFromStore.value.count, aggFromStore.value.sum, aggFromStore.value.avg);
-            aggregateReadings.merge(aggFromStore.value.timestamp, agg,
+            aggregateReadings.merge(windowTimestamp, agg,
                     (a1, a2) -> new Aggregate(a1.count + a2.count, a1.sum + a2.sum, (a1.sum + a2.sum)/(a1.count + a2.count)));
         }
         iterator.close();
@@ -196,19 +198,20 @@ public class QueryingController {
     }
 
     public Map<String, Aggregate> getLocalAggregates4TimestampAndGHPrefix(String storeName, int geohashPrecision, Long ts, String geohashPrefix) {
-        final ReadOnlyKeyValueStore<String, AggregateTuple> viewStore = streams.store(storeName,
-                QueryableStoreTypes.keyValueStore());
+        final ReadOnlyWindowStore<String, AggregateTuple> viewStore = streams.store(storeName,
+                QueryableStoreTypes.windowStore());
         String truncateGHPrefix = StringUtils.truncate(geohashPrefix, geohashPrecision);
         Map<String, Aggregate> aggregateReadings = new TreeMap<>();
         for (long i = 0L; i < Math.pow(32, geohashPrecision - truncateGHPrefix.length()); i++) {
             String ghPart = geohashPrecision == truncateGHPrefix.length() ? truncateGHPrefix : truncateGHPrefix + Base32.encodeBase32(i, geohashPrecision - truncateGHPrefix.length());
-            String searchKey = ghPart + "#" + toFormattedTimestamp(ts, ZoneId.systemDefault());
+            String searchKey = ghPart; // + "#" + toFormattedTimestamp(ts, ZoneId.systemDefault());
 //            System.out.println("[getLocalAggregates4TimestampAndGHPrefix] searchKey=" + searchKey);
-            AggregateTuple aggregateT = viewStore.get(searchKey);
+//            System.out.println("[getLocalAggregates4TimestampAndGHPrefix] ts=" + ts);
+            AggregateTuple aggregateT = viewStore.fetch(searchKey, ts);
             if (aggregateT != null) {
-//                System.out.println("Aggregate for " + ghPart + ": " + aggregateVT);
+                System.out.println("Aggregate for " + ghPart + ": " + aggregateT);
                 Aggregate agg = new Aggregate(aggregateT.count, aggregateT.sum, aggregateT.avg);
-                aggregateReadings.merge(aggregateT.geohash, agg,
+                aggregateReadings.merge(searchKey, agg,
                         (a1, a2) -> new Aggregate(a1.count + a2.count, a1.sum + a2.sum, (a1.sum + a2.sum)/(a1.count + a2.count)));
             }
         }
@@ -235,10 +238,10 @@ public class QueryingController {
         }
     }
 
-    private Long truncateTS(Long timestamp) {
+    private Long truncateTS(Long timestamp, ChronoUnit unit) {
         try{
             ZonedDateTime tsDate = ZonedDateTime.ofInstant(Instant.ofEpochMilli(timestamp), ZoneId.systemDefault());
-            return tsDate.truncatedTo(ChronoUnit.HOURS).toInstant().toEpochMilli();
+            return tsDate.truncatedTo(unit).toInstant().toEpochMilli();
         } catch (Exception e) {
             e.printStackTrace();
             return timestamp;
