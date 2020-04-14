@@ -2,7 +2,7 @@ package ingestion;
 
 import ingestion.util.serdes.JsonPOJODeserializer;
 import ingestion.util.serdes.JsonPOJOSerializer;
-import model.AggregateTuple;
+import model.Aggregate;
 import model.TemperatureReading;
 import org.apache.commons.cli.*;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
@@ -39,10 +39,8 @@ public class KafkaStreamsAggregator {
     public static final Integer GEOHASH_PRECISION = System.getenv("GEOHASH_PRECISION") != null ? Integer.parseInt(System.getenv("GEOHASH_PRECISION")) : 6;
     public static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMdd:HHmmss:SSS");
 
-    private static AggregateTuple temperatureAggregator(String key,
-                                                        TemperatureReading value,
-                                                        AggregateTuple aggregate) {
-        aggregate.key = key;
+    private static Aggregate temperatureAggregator(TemperatureReading value, Aggregate aggregate) {
+        // aggregate.key = key;
         // aggregate.geohash = key; //.split("#")[0];
         // aggregate.timestamp = LocalDateTime.parse(key.split("#")[1], DATE_TIME_FORMATTER)
         //        .toInstant(ZoneId.systemDefault().getRules().getOffset(Instant.now())).toEpochMilli(); // back to milliseconds timestamp
@@ -67,15 +65,15 @@ public class KafkaStreamsAggregator {
         final Serde <TemperatureReading> temperatureSerde = Serdes.serdeFrom(tempSerializer, tempDeserializer);
 
         serdeProps = new HashMap<>();
-        final Serializer <AggregateTuple> aggSerializer = new JsonPOJOSerializer<>();
-        serdeProps.put("JsonPOJOClass", AggregateTuple.class);
+        final Serializer <Aggregate> aggSerializer = new JsonPOJOSerializer<>();
+        serdeProps.put("JsonPOJOClass", Aggregate.class);
         aggSerializer.configure(serdeProps, false);
 
-        final Deserializer <AggregateTuple> aggDeserializer = new JsonPOJODeserializer<>();
-        serdeProps.put("JsonPOJOClass", AggregateTuple.class);
+        final Deserializer <Aggregate> aggDeserializer = new JsonPOJODeserializer<>();
+        serdeProps.put("JsonPOJOClass", Aggregate.class);
         aggDeserializer.configure(serdeProps, false);
 
-        final Serde <AggregateTuple> aggregateTupleSerde = Serdes.serdeFrom(aggSerializer, aggDeserializer);
+        final Serde <Aggregate> AggregateSerde = Serdes.serdeFrom(aggSerializer, aggDeserializer);
 
         // Create an stream from the 'temperature-readings' Kafka topic
         KStream <String, TemperatureReading> sourceStream = builder.stream(readingsTopic,
@@ -84,9 +82,9 @@ public class KafkaStreamsAggregator {
         // Create a per-hour KGroupedStream
         KGroupedStream <String, TemperatureReading> perHourKeyedStream = sourceStream.selectKey(
                 (sensorId, reading) -> {
-                    ZonedDateTime readingDate = ZonedDateTime.ofInstant(
-                            Instant.ofEpochMilli(reading.getTimestamp()),
-                            ZoneId.systemDefault());
+                    // ZonedDateTime readingDate = ZonedDateTime.ofInstant(
+                    //        Instant.ofEpochMilli(reading.getTimestamp()),
+                    //        ZoneId.systemDefault());
 
                     // Get 'Date:Time:Millis' formatted timestamp string truncated to the exact hour
                     // String hourTimestamp = readingDate.truncatedTo(ChronoUnit.HOURS)
@@ -97,13 +95,13 @@ public class KafkaStreamsAggregator {
                 }
         ).groupByKey();
 
-        KTable <Windowed<String>, AggregateTuple> perHourAggregate = perHourKeyedStream
+        KTable <Windowed<String>, Aggregate> perHourAggregate = perHourKeyedStream
                 .windowedBy(TimeWindows.of(Duration.ofHours(1)))
                 .aggregate(
-                    () -> new AggregateTuple("", "", 0L, 0L, 0.0, 0.0), // Lambda expression for the Initializer
-                    (key, value, aggregate) -> temperatureAggregator(key, value, aggregate), // Lambda expression for the Aggregator
-                    Materialized. <String, AggregateTuple, WindowStore<Bytes, byte[]>> as(
-                            "view-gh" + geohashPrecision + "-hour").withValueSerde(aggregateTupleSerde).withCachingEnabled()
+                    () -> new Aggregate(0L, 0.0, 0.0), // Lambda expression for the Initializer
+                    (key, value, aggregate) -> temperatureAggregator(value, aggregate), // Lambda expression for the Aggregator
+                    Materialized. <String, Aggregate, WindowStore<Bytes, byte[]>> as(
+                            "view-gh" + geohashPrecision + "-hour").withValueSerde(AggregateSerde).withCachingEnabled()
                 );
 
         Topology topology = builder.build();

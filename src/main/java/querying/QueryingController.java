@@ -3,7 +3,6 @@ package querying;
 import com.github.davidmoten.geo.Base32;
 import com.github.davidmoten.geo.GeoHash;
 import model.Aggregate;
-import model.AggregateTuple;
 import model.ErrorMessage;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.exception.ExceptionUtils;
@@ -168,18 +167,18 @@ public class QueryingController {
     }
 
     public Map<Long, Aggregate> getLocalAggregates4Range(String storeName, String geohashPrefix, Long from, Long to) {
-        final ReadOnlyWindowStore<String, AggregateTuple> viewStore = streams.store(storeName,
+        final ReadOnlyWindowStore<String, Aggregate> viewStore = streams.store(storeName,
                 QueryableStoreTypes.windowStore());
         // final String fromK = geohashPrefix + "#" + (from != null ? toFormattedTimestamp(from, ZoneId.systemDefault()) : "");
         // final String toK = geohashPrefix + "#" + (to != null ? toFormattedTimestamp(to, ZoneId.systemDefault()) : toFormattedTimestamp(System.currentTimeMillis(), ZoneId.systemDefault()));
         long fromk = from != null ? from : 0L;
         long tok = to != null ? to : System.currentTimeMillis();
         Map<Long, Aggregate> aggregateReadings = new TreeMap<>();
-        WindowStoreIterator<AggregateTuple> iterator =  viewStore.fetch(geohashPrefix, Instant.ofEpochMilli(fromk), Instant.ofEpochMilli(tok)); //.range(fromK, toK);
+        WindowStoreIterator<Aggregate> iterator =  viewStore.fetch(geohashPrefix, Instant.ofEpochMilli(fromk), Instant.ofEpochMilli(tok)); //.range(fromK, toK);
         while (iterator.hasNext()) {
-            KeyValue<Long, AggregateTuple> aggFromStore = iterator.next();
+            KeyValue<Long, Aggregate> aggFromStore = iterator.next();
             long windowTimestamp = aggFromStore.key;
-            AggregateTuple windowValue = aggFromStore.value;
+            Aggregate windowValue = aggFromStore.value;
 //            System.out.println("Aggregate of '" + geohashPrefix + "' @ time " + windowTimestamp + " is " + windowValue);
             Aggregate agg = new Aggregate(aggFromStore.value.count, aggFromStore.value.sum, aggFromStore.value.avg);
             aggregateReadings.merge(windowTimestamp, agg,
@@ -198,7 +197,7 @@ public class QueryingController {
     }
 
     public Map<String, Aggregate> getLocalAggregates4TimestampAndGHPrefix(String storeName, int geohashPrecision, Long ts, String geohashPrefix) {
-        final ReadOnlyWindowStore<String, AggregateTuple> viewStore = streams.store(storeName,
+        final ReadOnlyWindowStore<String, Aggregate> viewStore = streams.store(storeName,
                 QueryableStoreTypes.windowStore());
         String truncateGHPrefix = StringUtils.truncate(geohashPrefix, geohashPrecision);
         Map<String, Aggregate> aggregateReadings = new TreeMap<>();
@@ -207,9 +206,9 @@ public class QueryingController {
             String searchKey = ghPart; // + "#" + toFormattedTimestamp(ts, ZoneId.systemDefault());
 //            System.out.println("[getLocalAggregates4TimestampAndGHPrefix] searchKey=" + searchKey);
 //            System.out.println("[getLocalAggregates4TimestampAndGHPrefix] ts=" + ts);
-            AggregateTuple aggregateT = viewStore.fetch(searchKey, ts);
+            Aggregate aggregateT = viewStore.fetch(searchKey, ts);
             if (aggregateT != null) {
-                System.out.println("Aggregate for " + ghPart + ": " + aggregateT);
+                // System.out.println("Aggregate for " + ghPart + ": " + aggregateT);
                 Aggregate agg = new Aggregate(aggregateT.count, aggregateT.sum, aggregateT.avg);
                 aggregateReadings.merge(searchKey, agg,
                         (a1, a2) -> new Aggregate(a1.count + a2.count, a1.sum + a2.sum, (a1.sum + a2.sum)/(a1.count + a2.count)));
