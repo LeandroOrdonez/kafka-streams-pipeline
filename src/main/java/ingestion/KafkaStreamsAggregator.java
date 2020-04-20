@@ -170,7 +170,7 @@ public class KafkaStreamsAggregator {
             } else {
                 endpointHost = REST_ENDPOINT_HOSTNAME;
             }
-            if( line.hasOption( "endpoint-host" ) ) {
+            if( line.hasOption( "endpoint-port" ) ) {
                 endpointPort = Integer.parseInt(line.getOptionValue("endpoint-port"));
             } else {
                 endpointPort = REST_ENDPOINT_PORT;
